@@ -156,7 +156,14 @@ import useSWR from 'swr'
       
       <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
         {/* Stats */}
-        <StatsCards stats={stats} />
+        <StatsCards stats={stats || {
+          total: 0,
+          available: 0,
+          filled: 0,
+          overdue: 0,
+          maintenance: 0,
+          unidentified: 0,
+        }} />
         
         {/* Room Tabs - Mobile Optimized */}
         <Tabs value={activeRoom} onValueChange={setActiveRoom} className="w-full">

@@ -1,0 +1,121 @@
+// Prisma schema for Locker Management System
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id         String     @id @default(uuid())
+  nik        String     @unique
+  name       String
+  department String
+  isActive   Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  
+  contracts  Contract[]
+  keyLogs    KeyLog[]
+  heldKeys   LockerKey[] @relation("KeyHolder")
+}
+
+model Locker {
+  id           String       @id @default(uuid())
+  lockerNumber String       @unique  // Format: L/M01/001
+  roomId       String                // M01, M02, F01
+  status       LockerStatus @default(AVAILABLE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  
+  contracts    Contract[]
+  keyLogs      KeyLog[]
+  keys         LockerKey[]
+}
+
+// Physical keys for each locker
+// 1 locker can have multiple keys (e.g., employee key + HRGA backup keys)
+model LockerKey {
+  id                String       @id @default(uuid())
+  lockerId          String
+  keyNumber         Int          // Key sequence for this locker (1, 2, 3...)
+  physicalKeyNumber String?      // Physical key number engraved on key (null for duplicate/spare keys)
+  label             String?      // Optional label: "Employee", "HRGA Backup", etc.
+  status            KeyStatus    @default(AVAILABLE)
+  holderId          String?      // Current holder (employee who has this key)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  
+  locker       Locker       @relation(fields: [lockerId], references: [id], onDelete: Cascade)
+  holder       Employee?    @relation("KeyHolder", fields: [holderId], references: [id], onDelete: SetNull)
+  keyLogs      KeyLog[]
+  
+  @@unique([lockerId, keyNumber])
+  @@index([lockerId])
+  @@index([holderId])
+}
+
+model Contract {
+  id          String    @id @default(uuid())
+  employeeId  String
+  lockerId    String
+  contractSeq Int       // 1, 2, 3...
+  startDate   DateTime
+  endDate     DateTime? // null = permanent employee (no end date)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  locker      Locker   @relation(fields: [lockerId], references: [id], onDelete: Cascade)
+  
+  @@unique([lockerId, contractSeq])
+  @@index([employeeId])
+  @@index([lockerId])
+}
+
+model KeyLog {
+  id           String    @id @default(uuid())
+  lockerId     String
+  lockerKeyId  String?   // Reference to specific key
+  employeeId   String
+  action       KeyAction // TAKEN or RETURNED
+  method       KeyMethod // QR or MANUAL
+  timestamp    DateTime  @default(now())
+  
+  locker       Locker    @relation(fields: [lockerId], references: [id], onDelete: Cascade)
+  lockerKey    LockerKey? @relation(fields: [lockerKeyId], references: [id], onDelete: SetNull)
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  
+  @@index([lockerId])
+  @@index([lockerKeyId])
+  @@index([employeeId])
+}
+
+enum LockerStatus {
+  AVAILABLE
+  FILLED
+  OVERDUE
+  MAINTENANCE
+  UNIDENTIFIED
+}
+
+enum KeyStatus {
+  AVAILABLE    // Key is in storage/available
+  WITH_EMPLOYEE // Key is with assigned employee
+  WITH_HRGA    // Key is with HRGA
+  LOST         // Key is lost
+}
+
+enum KeyAction {
+  TAKEN
+  RETURNED
+}
+
+enum KeyMethod {
+  QR
+  MANUAL
+}

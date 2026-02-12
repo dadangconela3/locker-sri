@@ -1,0 +1,4 @@
+locker_number,employee_nik,start_date,end_date,notes
+L/M01/001,EMP001,2026-02-10,,Karyawan tetap (permanent) - kosongkan end_date
+L/M01/002,EMP002,2026-02-10,2027-02-10,Karyawan kontrak - isi end_date
+L/M02/015,EMP003,2026-02-10,2026-08-10,Karyawan kontrak 6 bulan

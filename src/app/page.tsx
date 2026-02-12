@@ -1,65 +1,223 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Button } from '@/components/ui/button'
+import { LockerGrid } from '@/components/locker-grid'
+import { LockerModal } from '@/components/locker-modal'
+import { StatsCards } from '@/components/stats-cards'
+import { OverdueList } from '@/components/overdue-list'
+import { Locker, LockerWithDetails, DashboardStats, ROOM_CONFIGS } from '@/types'
+import { 
+  RefreshCw, 
+  QrCode, 
+  Box,
+  Users,
+  Key,
+  Upload
+} from 'lucide-react'
+import Link from 'next/link'
 
 export default function Home() {
+  const [lockers, setLockers] = useState<Locker[]>([])
+  const [selectedLocker, setSelectedLocker] = useState<LockerWithDetails | null>(null)
+  const [stats, setStats] = useState<DashboardStats>({
+    total: 0,
+    available: 0,
+    filled: 0,
+    overdue: 0,
+    maintenance: 0,
+    unidentified: 0,
+  })
+  const [overdueContracts, setOverdueContracts] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [activeRoom, setActiveRoom] = useState('M01')
+  
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [lockersRes, statsRes, overdueRes] = await Promise.all([
+        fetch('/api/lockers'),
+        fetch('/api/stats'),
+        fetch('/api/contracts?overdueOnly=true'),
+      ])
+      
+      const lockersData = await lockersRes.json()
+      const statsData = await statsRes.json()
+      const overdueData = await overdueRes.json()
+      
+      setLockers(lockersData)
+      setStats(statsData)
+      setOverdueContracts(overdueData)
+    } catch (error) {
+      console.error('Failed to fetch data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+  
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+  
+  const handleLockerClick = async (locker: Locker) => {
+    try {
+      const res = await fetch(`/api/lockers/${locker.id}`)
+      const data = await res.json()
+      setSelectedLocker(data)
+      setModalOpen(true)
+    } catch (error) {
+      console.error('Failed to fetch locker details:', error)
+    }
+  }
+  
+  const handleOverdueLockerClick = async (lockerId: string) => {
+    try {
+      const res = await fetch(`/api/lockers/${lockerId}`)
+      const data = await res.json()
+      setSelectedLocker(data)
+      setModalOpen(true)
+    } catch (error) {
+      console.error('Failed to fetch locker details:', error)
+    }
+  }
+  
+  const handleModalClose = () => {
+    setModalOpen(false)
+    setSelectedLocker(null)
+  }
+  
+  const handleRefresh = () => {
+    fetchData()
+    if (selectedLocker) {
+      fetch(`/api/lockers/${selectedLocker.id}`)
+        .then(res => res.json())
+        .then(data => setSelectedLocker(data))
+        .catch(console.error)
+    }
+  }
+  
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
+      {/* Header - Mobile Optimized */}
+      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-800">
+        <div className="container mx-auto px-3 sm:px-4 py-3 sm:py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="p-1.5 sm:p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg sm:rounded-xl">
+                <Box className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-base sm:text-xl font-bold text-gray-900 dark:text-white">
+                  Locker Management
+                </h1>
+                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
+                  Track and manage employee lockers
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRefresh}
+                disabled={loading}
+                className="h-8 sm:h-9 px-2 sm:px-3"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline ml-2">Refresh</span>
+              </Button>
+              <Link href="/employees">
+                <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                  <Users className="w-4 h-4" />
+                  <span className="hidden lg:inline ml-2">Employees</span>
+                </Button>
+              </Link>
+              <Link href="/keys">
+                <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                  <Key className="w-4 h-4" />
+                  <span className="hidden lg:inline ml-2">Keys</span>
+                </Button>
+              </Link>
+              <Link href="/import">
+                <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">
+                  <Upload className="w-4 h-4" />
+                  <span className="hidden lg:inline ml-2">Import</span>
+                </Button>
+              </Link>
+              <Link href="/view">
+                <Button 
+                  size="sm" 
+                  className="h-8 sm:h-9 px-2 sm:px-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
+                >
+                  <QrCode className="w-4 h-4" />
+                  <span className="hidden sm:inline ml-2">View Locker</span>
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </header>
+      
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-8">
+        {/* Stats */}
+        <StatsCards stats={stats} />
+        
+        {/* Room Tabs - Mobile Optimized */}
+        <Tabs value={activeRoom} onValueChange={setActiveRoom} className="w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+              Locker Grid
+            </h2>
+            <TabsList className="bg-gray-100 dark:bg-gray-800 w-full sm:w-auto grid grid-cols-3 sm:flex">
+              {ROOM_CONFIGS.map((room) => (
+                <TabsTrigger 
+                  key={room.roomId} 
+                  value={room.roomId} 
+                  className="px-2 sm:px-4 py-2 text-xs sm:text-sm"
+                >
+                  <span className="hidden sm:inline">{room.name}</span>
+                  <span className="sm:hidden">{room.roomId}</span>
+                  <span className="ml-1 text-[10px] sm:text-xs opacity-60">({room.count})</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          
+          {ROOM_CONFIGS.map((room) => (
+            <TabsContent key={room.roomId} value={room.roomId}>
+              <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl p-3 sm:p-6 overflow-hidden">
+                <LockerGrid 
+                  lockers={lockers}
+                  roomId={room.roomId}
+                  onLockerClick={handleLockerClick}
+                />
+              </div>
+            </TabsContent>
+          ))}
+        </Tabs>
+        
+        {/* Overdue List */}
+        <div>
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">
+            Overdue Returns
+          </h2>
+          <OverdueList 
+            contracts={overdueContracts}
+            onLockerClick={handleOverdueLockerClick}
+          />
         </div>
       </main>
+      
+      {/* Locker Modal */}
+      <LockerModal 
+        locker={selectedLocker}
+        open={modalOpen}
+        onClose={handleModalClose}
+        onRefresh={handleRefresh}
+      />
     </div>
-  );
+  )
 }

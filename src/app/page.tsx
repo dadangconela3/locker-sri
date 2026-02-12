@@ -18,92 +18,78 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-export default function Home() {
-  const [lockers, setLockers] = useState<Locker[]>([])
-  const [selectedLocker, setSelectedLocker] = useState<LockerWithDetails | null>(null)
-  const [stats, setStats] = useState<DashboardStats>({
-    total: 0,
-    available: 0,
-    filled: 0,
-    overdue: 0,
-    maintenance: 0,
-    unidentified: 0,
+import useSWR from 'swr'
+
+  const fetcher = (url: string) => fetch(url).then((res) => {
+    if (!res.ok) throw new Error('Failed to fetch')
+    return res.json()
   })
-  const [overdueContracts, setOverdueContracts] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [activeRoom, setActiveRoom] = useState('M01')
-  
-  const fetchData = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [lockersRes, statsRes, overdueRes] = await Promise.all([
-        fetch('/api/lockers'),
-        fetch('/api/stats'),
-        fetch('/api/contracts?overdueOnly=true'),
-      ])
-      
-      if (!lockersRes.ok) throw new Error('Failed to fetch lockers')
-      if (!statsRes.ok) throw new Error('Failed to fetch stats')
-      if (!overdueRes.ok) throw new Error('Failed to fetch overdue contracts')
-      
-      const lockersData = await lockersRes.json()
-      const statsData = await statsRes.json()
-      const overdueData = await overdueRes.json()
-      
-      setLockers(Array.isArray(lockersData) ? lockersData : [])
-      setStats(statsData)
-      setOverdueContracts(Array.isArray(overdueData) ? overdueData : [])
-    } catch (error) {
-      console.error('Failed to fetch data:', error)
-      // Fallback to empty states to prevent crash
-      setLockers([])
-      setOverdueContracts([])
-    } finally {
-      setLoading(false)
+
+  export default function Home() {
+    // defined locally to avoid re-creation
+    const { data: lockers = [], mutate: mutateLockers } = useSWR<Locker[]>('/api/lockers', fetcher, {
+      fallbackData: [],
+      revalidateOnFocus: false // Don't aggressive revalidate on window focus for lockers
+    })
+    
+    const { data: stats } = useSWR<DashboardStats>('/api/stats', fetcher, {
+      fallbackData: {
+        total: 0,
+        available: 0,
+        filled: 0,
+        overdue: 0,
+        maintenance: 0,
+        unidentified: 0,
+      }
+    })
+    
+    const { data: overdueContracts = [] } = useSWR<any[]>('/api/contracts?overdueOnly=true', fetcher, {
+      fallbackData: []
+    })
+
+    const [selectedLocker, setSelectedLocker] = useState<LockerWithDetails | null>(null)
+    const [modalOpen, setModalOpen] = useState(false)
+    const [activeRoom, setActiveRoom] = useState('M01')
+    
+    // Derived state for loading - false if we have data (even stale)
+    const loading = !lockers.length && !stats
+    
+    const handleLockerClick = async (locker: Locker) => {
+      try {
+        const res = await fetch(`/api/lockers/${locker.id}`)
+        const data = await res.json()
+        setSelectedLocker(data)
+        setModalOpen(true)
+      } catch (error) {
+        console.error('Failed to fetch locker details:', error)
+      }
     }
-  }, [])
-  
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-  
-  const handleLockerClick = async (locker: Locker) => {
-    try {
-      const res = await fetch(`/api/lockers/${locker.id}`)
-      const data = await res.json()
-      setSelectedLocker(data)
-      setModalOpen(true)
-    } catch (error) {
-      console.error('Failed to fetch locker details:', error)
+    
+    const handleOverdueLockerClick = async (lockerId: string) => {
+      try {
+        const res = await fetch(`/api/lockers/${lockerId}`)
+        const data = await res.json()
+        setSelectedLocker(data)
+        setModalOpen(true)
+      } catch (error) {
+        console.error('Failed to fetch locker details:', error)
+      }
     }
-  }
-  
-  const handleOverdueLockerClick = async (lockerId: string) => {
-    try {
-      const res = await fetch(`/api/lockers/${lockerId}`)
-      const data = await res.json()
-      setSelectedLocker(data)
-      setModalOpen(true)
-    } catch (error) {
-      console.error('Failed to fetch locker details:', error)
+    
+    const handleModalClose = () => {
+      setModalOpen(false)
+      setSelectedLocker(null)
     }
-  }
-  
-  const handleModalClose = () => {
-    setModalOpen(false)
-    setSelectedLocker(null)
-  }
-  
-  const handleRefresh = () => {
-    fetchData()
-    if (selectedLocker) {
-      fetch(`/api/lockers/${selectedLocker.id}`)
-        .then(res => res.json())
-        .then(data => setSelectedLocker(data))
-        .catch(console.error)
+    
+    const handleRefresh = () => {
+      mutateLockers() 
+      if (selectedLocker) {
+        fetch(`/api/lockers/${selectedLocker.id}`)
+          .then(res => res.json())
+          .then(data => setSelectedLocker(data))
+          .catch(console.error)
+      }
     }
-  }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">

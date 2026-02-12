@@ -9,21 +9,34 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const withContracts = searchParams.get('withContracts') === 'true'
     
-    const lockers = await prisma.locker.findMany({
+    const queryArgs: any = {
       where: {
         ...(roomId && { roomId }),
         ...(status && { status: status as any }),
       },
-      include: withContracts ? {
+      orderBy: { lockerNumber: 'asc' },
+    }
+
+    if (withContracts) {
+      queryArgs.include = {
         contracts: {
           where: { isActive: true },
           include: { employee: true },
           orderBy: { contractSeq: 'desc' },
           take: 1,
         },
-      } : undefined,
-      orderBy: { lockerNumber: 'asc' },
-    })
+      }
+    } else {
+      // Optimization: Only fetch fields needed for the grid
+      queryArgs.select = {
+        id: true,
+        lockerNumber: true,
+        roomId: true,
+        status: true,
+      }
+    }
+    
+    const lockers = await prisma.locker.findMany(queryArgs)
     
     return NextResponse.json(lockers)
   } catch (error) {

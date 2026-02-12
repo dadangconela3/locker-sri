@@ -67,7 +67,13 @@ const BOTTOM_ROW = {
   lower: [26, 24, 22, 20, 18, 16, 14, 12, 10, 8, 6, 4, 2]
 }
 
-function LockerButton({ 
+import { memo } from 'react'
+
+// ... (imports remain)
+
+// ... (constants remain)
+
+const LockerButton = memo(function LockerButton({ 
   locker, 
   num, 
   onClick,
@@ -105,9 +111,9 @@ function LockerButton({
       {num}
     </button>
   )
-}
+})
 
-function HorizontalRow({
+const HorizontalRow = memo(function HorizontalRow({
   row,
   lockerMap,
   onLockerClick,
@@ -135,9 +141,9 @@ function HorizontalRow({
       </div>
     </div>
   )
-}
+})
 
-function VerticalColumn({
+const VerticalColumn = memo(function VerticalColumn({
   pairs,
   lockerMap,
   onLockerClick,
@@ -162,9 +168,9 @@ function VerticalColumn({
       </div>
     </div>
   )
-}
+})
 
-function FourRowBlock({
+const FourRowBlock = memo(function FourRowBlock({
   rows,
   lockerMap,
   onLockerClick,
@@ -189,9 +195,9 @@ function FourRowBlock({
       </div>
     </div>
   )
-}
+})
 
-function Corridor({ label }: { label?: string }) {
+const Corridor = memo(function Corridor({ label }: { label?: string }) {
   return (
     <div className="flex items-center justify-center py-1">
       <div className="flex-1 h-px bg-gray-300 dark:bg-gray-600" />
@@ -199,7 +205,7 @@ function Corridor({ label }: { label?: string }) {
       <div className="flex-1 h-px bg-gray-300 dark:bg-gray-600" />
     </div>
   )
-}
+})
 
 export function M01Layout({ lockers, onLockerClick }: M01LayoutProps) {
   // Create a map for quick lookup by locker number

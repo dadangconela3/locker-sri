@@ -43,15 +43,22 @@ export default function Home() {
         fetch('/api/contracts?overdueOnly=true'),
       ])
       
+      if (!lockersRes.ok) throw new Error('Failed to fetch lockers')
+      if (!statsRes.ok) throw new Error('Failed to fetch stats')
+      if (!overdueRes.ok) throw new Error('Failed to fetch overdue contracts')
+      
       const lockersData = await lockersRes.json()
       const statsData = await statsRes.json()
       const overdueData = await overdueRes.json()
       
-      setLockers(lockersData)
+      setLockers(Array.isArray(lockersData) ? lockersData : [])
       setStats(statsData)
-      setOverdueContracts(overdueData)
+      setOverdueContracts(Array.isArray(overdueData) ? overdueData : [])
     } catch (error) {
       console.error('Failed to fetch data:', error)
+      // Fallback to empty states to prevent crash
+      setLockers([])
+      setOverdueContracts([])
     } finally {
       setLoading(false)
     }

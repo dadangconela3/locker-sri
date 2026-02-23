@@ -7,10 +7,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search')
     const activeOnly = searchParams.get('activeOnly') === 'true'
+    const withoutLocker = searchParams.get('withoutLocker') === 'true'
     
     const employees = await prisma.employee.findMany({
       where: {
         ...(activeOnly && { isActive: true }),
+        ...(withoutLocker && {
+          contracts: {
+            none: { isActive: true }
+          }
+        }),
         ...(search && {
           OR: [
             { name: { contains: search, mode: 'insensitive' } },
@@ -23,13 +29,11 @@ export async function GET(request: NextRequest) {
         contracts: {
           where: { isActive: true },
           include: {
-            locker: {
-              select: {
-                lockerNumber: true,
-                roomId: true,
-              },
-            },
+            locker: true,
           },
+        },
+        heldKeys: {
+          include: { locker: true },
         },
       },
       orderBy: { name: 'asc' },
@@ -49,7 +53,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { nik, name, department } = body
+    const { nik, name, department, lockerId, contractSeq, startDate, endDate, lockerKeyId } = body
     
     if (!nik || !name || !department) {
       return NextResponse.json(
@@ -70,9 +74,66 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    const employee = await prisma.employee.create({
-      data: { nik, name, department },
+    const employee = await prisma.$transaction(async (tx) => {
+      const created = await tx.employee.create({
+        data: { nik, name, department },
+      })
+      
+      // If locker is provided during creation, assign it
+      if (lockerId) {
+        await tx.contract.create({
+          data: {
+            lockerId,
+            employeeId: created.id,
+            contractSeq: contractSeq || 1,
+            startDate: startDate ? new Date(startDate) : new Date(),
+            endDate: endDate ? new Date(endDate) : null,
+            isActive: true,
+          },
+        })
+        
+        await tx.locker.update({
+          where: { id: lockerId },
+          data: { status: 'FILLED' },
+        })
+      }
+      
+      // If key is provided during creation, assign it
+      if (lockerKeyId) {
+        const newKey = await tx.lockerKey.update({
+          where: { id: lockerKeyId },
+          data: { status: 'WITH_EMPLOYEE', holderId: created.id },
+        })
+        
+        await tx.keyLog.create({
+          data: {
+            lockerId: newKey.lockerId,
+            lockerKeyId: newKey.id,
+            employeeId: created.id,
+            action: 'TAKEN',
+            method: 'MANUAL',
+          }
+        })
+      }
+      
+      return created
     })
+    
+    // Log the creation
+    if (employee) {
+      const logParts = [`Karyawan dibuat`]
+      if (lockerId) logParts.push(`Locker di-assign`)
+      if (lockerKeyId) logParts.push(`Kunci di-assign`)
+      
+      await prisma.activityLog.create({
+        data: {
+          action: 'CREATE',
+          entity: 'EMPLOYEE',
+          entityId: employee.id,
+          description: `${nik} - ${name}: ${logParts.join(', ')}`,
+        }
+      })
+    }
     
     return NextResponse.json(employee, { status: 201 })
   } catch (error) {

@@ -119,3 +119,16 @@ enum KeyMethod {
   QR
   MANUAL
 }
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  action      String   // CREATE, UPDATE, DELETE, IMPORT, ASSIGN, EXTEND, etc.
+  entity      String   // EMPLOYEE, CONTRACT, LOCKER, KEY
+  entityId    String?  // ID of the affected entity
+  description String   // Human-readable description of what changed
+  details     String?  // JSON string with before/after or extra data
+  timestamp   DateTime @default(now())
+
+  @@index([entity])
+  @@index([timestamp])
+}

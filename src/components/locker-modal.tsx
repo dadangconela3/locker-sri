@@ -252,8 +252,13 @@ export function LockerModal({ locker, open, onClose, onRefresh }: LockerModalPro
           <ContractForm 
             lockerId={locker.id}
             lockerNumber={locker.lockerNumber}
-            currentContractSeq={locker.contracts?.length || 0}
+            currentContractSeq={
+              locker.contracts && locker.contracts.length > 0
+                ? Math.max(...locker.contracts.map(c => c.contractSeq))
+                : 0
+            }
             currentEmployee={currentContract?.employee}
+            contracts={locker.contracts || []}
             open={showContractForm}
             onClose={() => setShowContractForm(false)}
             onSuccess={handleContractSuccess}

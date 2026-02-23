@@ -14,7 +14,8 @@ import {
   Box,
   Users,
   Key,
-  Upload
+  Upload,
+  ShieldCheck
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -90,6 +91,39 @@ import useSWR from 'swr'
           .catch(console.error)
       }
     }
+    
+    const [syncing, setSyncing] = useState(false)
+    
+    const handleSyncStatus = async () => {
+      setSyncing(true)
+      try {
+        const res = await fetch('/api/lockers/sync-status', { method: 'POST' })
+        const data = await res.json()
+        
+        const messages: string[] = []
+        
+        if (data.overdueUpdated > 0) {
+          messages.push(`✅ ${data.overdueUpdated} locker diubah ke status OVERDUE`)
+        }
+        
+        if (data.orphanedLockers && data.orphanedLockers.length > 0) {
+          const lockerNumbers = data.orphanedLockers.map((l: { lockerNumber: string }) => l.lockerNumber).join(', ')
+          messages.push(`⚠️ ${data.orphanedLockers.length} locker FILLED tanpa karyawan: ${lockerNumbers}`)
+        }
+        
+        if (messages.length === 0) {
+          messages.push('✅ Semua status locker sudah sesuai!')
+        }
+        
+        alert(messages.join('\n\n'))
+        mutateLockers()
+      } catch (error) {
+        console.error('Failed to sync:', error)
+        alert('Gagal melakukan sinkronisasi status')
+      } finally {
+        setSyncing(false)
+      }
+    }
   
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-950">
@@ -121,6 +155,17 @@ import useSWR from 'swr'
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span className="hidden sm:inline ml-2">Refresh</span>
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleSyncStatus}
+                disabled={syncing}
+                className="h-8 sm:h-9 px-2 sm:px-3"
+                title="Sinkronisasi status locker (cek overdue & audit)"
+              >
+                <ShieldCheck className={`w-4 h-4 ${syncing ? 'animate-pulse' : ''}`} />
+                <span className="hidden sm:inline ml-2">Cek Status</span>
               </Button>
               <Link href="/employees">
                 <Button variant="outline" size="sm" className="h-8 sm:h-9 px-2 sm:px-3">

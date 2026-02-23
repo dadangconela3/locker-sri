@@ -143,17 +143,22 @@ export function EmployeeImportDialog({
             <AlertDescription className="text-sm space-y-2 mt-2">
               <ol className="list-decimal list-inside space-y-1">
                 <li>Download the CSV template below</li>
-                <li>Fill in employee data (NIK, Name, Department, isActive)</li>
+                <li>Fill in employee data</li>
                 <li>Save the file as CSV format</li>
                 <li>Upload the file using the button below</li>
               </ol>
               <div className="mt-3 pt-2 border-t">
                 <p className="font-medium mb-1">CSV Format:</p>
                 <ul className="list-disc list-inside text-xs space-y-0.5">
-                  <li><strong>nik</strong>: Employee ID (required, must be unique)</li>
-                  <li><strong>name</strong>: Employee name (required)</li>
-                  <li><strong>department</strong>: Department name (required)</li>
-                  <li><strong>isActive</strong>: true/false, 1/0, yes/no, or active/inactive (optional, default: true)</li>
+                  <li><strong>nik</strong>: NIK Karyawan (wajib, harus unik)</li>
+                  <li><strong>name</strong>: Nama Karyawan (wajib)</li>
+                  <li><strong>department</strong>: Departemen (wajib)</li>
+                  <li><strong>lockerNumber</strong>: No. Locker, misal L/M01/001 (opsional)</li>
+                  <li><strong>contractSeq</strong>: Contract ke- (1, 2, 3...) (opsional, default: 1)</li>
+                  <li><strong>startDate</strong>: Tanggal mulai kontrak, format DD/MM/YYYY (wajib jika ada locker)</li>
+                  <li><strong>endDate</strong>: Tanggal selesai kontrak, format DD/MM/YYYY (kosong = permanent)</li>
+                  <li><strong>isActive</strong>: true/false, 1/0, yes/no (opsional, default: true)</li>
+                  <li><strong>physicalKeyNumber</strong>: Kode kunci fisik (opsional)</li>
                 </ul>
               </div>
             </AlertDescription>

@@ -81,11 +81,11 @@ function parseCSVLine(line: string): string[] {
  * Generate CSV template for employee import
  */
 export function generateEmployeeCSVTemplate(): string {
-  const headers = ['nik', 'name', 'department', 'isActive']
+  const headers = ['nik', 'name', 'department', 'lockerNumber', 'contractSeq', 'startDate', 'endDate', 'isActive', 'physicalKeyNumber']
   const examples = [
-    ['EMP001', 'John Doe', 'Engineering', 'true'],
-    ['EMP002', 'Jane Smith', 'Marketing', 'true'],
-    ['EMP003', 'Bob Wilson', 'Finance', 'false']
+    ['EMP001', 'John Doe', 'Engineering', 'L/M01/001', '1', '01/01/2025', '31/12/2025', 'true', 'K001'],
+    ['EMP002', 'Jane Smith', 'Marketing', 'L/M01/002', '1', '01/01/2025', '', 'true', 'K002'],
+    ['EMP003', 'Bob Wilson', 'Finance', '', '', '', '', 'false', '']
   ]
   
   const rows = [

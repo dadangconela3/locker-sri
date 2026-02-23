@@ -32,13 +32,16 @@ import {
   UserCheck,
   UserX,
   Upload,
+  Download,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Filter
+  Filter,
+  ClipboardList
 } from 'lucide-react'
-import { Employee } from '@/types'
+import { Employee, Locker, LockerKey } from '@/types'
 import { EmployeeImportDialog } from '@/components/employee-import-dialog'
+import { LockerSelect, TomSelectWrapper } from '@/components/tom-select-wrapper'
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -57,8 +60,43 @@ export default function EmployeesPage() {
     name: '',
     department: '',
     isActive: true,
+    lockerId: '',
+    contractSeq: 1,
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+    isPermanent: false,
+    lockerKeyId: '',
   })
+  
+  const [availableLockers, setAvailableLockers] = useState<Locker[]>([])
+  const [availableKeys, setAvailableKeys] = useState<LockerKey[]>([])
+  
+  // Fetch available lockers
+  useEffect(() => {
+    fetch('/api/lockers?status=AVAILABLE')
+      .then(res => res.json())
+      .then(data => setAvailableLockers(data))
+      .catch(console.error)
+  }, [])
+
+  // Fetch keys when locker changes
+  useEffect(() => {
+    if (formData.lockerId) {
+      fetch(`/api/keys?lockerId=${formData.lockerId}`)
+        .then(res => res.json())
+        .then((data: LockerKey[]) => {
+          // Show available keys and the key currently held by this employee
+          const validKeys = data.filter(k => k.status === 'AVAILABLE' || k.holderId === editingEmployee?.id);
+          setAvailableKeys(validKeys);
+        })
+        .catch(console.error)
+    } else {
+      setAvailableKeys([])
+    }
+  }, [formData.lockerId, editingEmployee?.id])
   const [saving, setSaving] = useState(false)
+  const [activityLogs, setActivityLogs] = useState<any[]>([])
+  const [showLogs, setShowLogs] = useState(false)
   
   // Custom sort function for locker numbers
   // Order: M01 -> M02 -> F01 -> Others -> Empty
@@ -133,17 +171,52 @@ export default function EmployeesPage() {
   
   useEffect(() => {
     fetchEmployees()
-  }, [fetchEmployees])
+  }, [])
+  
+  // Fetch activity logs
+  const fetchLogs = useCallback(async () => {
+    try {
+      const res = await fetch('/api/activity-logs?entity=EMPLOYEE&limit=30')
+      const data = await res.json()
+      setActivityLogs(data)
+    } catch (error) {
+      console.error('Failed to fetch logs:', error)
+    }
+  }, [])
+  
+  useEffect(() => {
+    if (showLogs) fetchLogs()
+  }, [showLogs, fetchLogs])
   
   const handleOpenDialog = (employee?: Employee) => {
     if (employee) {
       setEditingEmployee(employee)
+      const currentContract = employee.contracts?.find(c => c.isActive)
+      const currentKey = employee.heldKeys?.[0]
+      
       setFormData({
         nik: employee.nik,
         name: employee.name,
         department: employee.department,
         isActive: employee.isActive,
+        lockerId: currentContract?.lockerId || '',
+        contractSeq: currentContract?.contractSeq || 1,
+        startDate: currentContract?.startDate ? new Date(currentContract.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+        endDate: currentContract?.endDate ? new Date(currentContract.endDate).toISOString().split('T')[0] : '',
+        isPermanent: currentContract ? !currentContract.endDate : false,
+        lockerKeyId: currentKey?.id || '',
       })
+      
+      // If employee already has a locker, we need to add it to availableLockers if it's not there
+      if (currentContract?.locker) {
+        setAvailableLockers(prev => {
+          if (!prev.find(l => l.id === currentContract.lockerId)) {
+            return [...prev, currentContract.locker as unknown as Locker]
+          }
+          return prev
+        })
+      }
+      
     } else {
       setEditingEmployee(null)
       setFormData({
@@ -151,6 +224,12 @@ export default function EmployeesPage() {
         name: '',
         department: '',
         isActive: true,
+        lockerId: '',
+        contractSeq: 1,
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '',
+        isPermanent: false,
+        lockerKeyId: '',
       })
     }
     setDialogOpen(true)
@@ -165,10 +244,23 @@ export default function EmployeesPage() {
       
       const method = editingEmployee ? 'PATCH' : 'POST'
       
+      const payload: Record<string, string | number | boolean | null> = { ...formData }
+      // If permanent, remove endDate
+      if (payload.isPermanent) {
+        payload.endDate = null
+      }
+      // Only send locker details if lockerId is selected
+      if (!payload.lockerId) {
+        delete payload.contractSeq
+        delete payload.startDate
+        delete payload.endDate
+        delete payload.lockerKeyId
+      }
+      
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       })
       
       if (!res.ok) {
@@ -179,6 +271,7 @@ export default function EmployeesPage() {
       
       setDialogOpen(false)
       fetchEmployees()
+      if (showLogs) fetchLogs()
     } catch (error) {
       console.error('Failed to save employee:', error)
       alert('Failed to save employee')
@@ -193,6 +286,7 @@ export default function EmployeesPage() {
     try {
       await fetch(`/api/employees/${id}`, { method: 'DELETE' })
       fetchEmployees()
+      if (showLogs) fetchLogs()
     } catch (error) {
       console.error('Failed to delete employee:', error)
       alert('Failed to delete employee')
@@ -216,6 +310,49 @@ export default function EmployeesPage() {
     total: employees.length,
     active: employees.filter(e => e.isActive).length,
     inactive: employees.filter(e => !e.isActive).length,
+  }
+
+  const handleExportCSV = () => {
+    const headers = ['NIK', 'Nama Karyawan', 'Departemen', 'No. Locker', 'Contract Ke-', 'Start Date', 'End Date', 'Status', 'Kode Kunci Locker']
+    
+    const rows = sortedAndFilteredEmployees.map(emp => {
+      const contract = emp.contracts?.find(c => c.isActive)
+      const key = emp.heldKeys?.[0]
+      
+      const formatDate = (d: Date | string | null | undefined) => {
+        if (!d) return ''
+        const date = new Date(d)
+        const day = String(date.getDate()).padStart(2, '0')
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const year = date.getFullYear()
+        return `${day}/${month}/${year}`
+      }
+      
+      return [
+        emp.nik,
+        emp.name,
+        emp.department,
+        contract?.locker?.lockerNumber || '',
+        contract?.contractSeq?.toString() || '',
+        formatDate(contract?.startDate),
+        contract?.endDate ? formatDate(contract.endDate) : 'Permanent',
+        emp.isActive ? 'Active' : 'Inactive',
+        key?.physicalKeyNumber || '',
+      ]
+    })
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const BOM = '\uFEFF'
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `employees_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
   }
   
   return (
@@ -244,6 +381,27 @@ export default function EmployeesPage() {
             </div>
             
             <div className="flex gap-2">
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setShowLogs(true)}
+                className="h-8 sm:h-9"
+              >
+                <ClipboardList className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">Log Aktivitas</span>
+                <span className="sm:hidden">Log</span>
+              </Button>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                className="h-8 sm:h-9"
+                disabled={employees.length === 0}
+              >
+                <Download className="w-4 h-4 mr-1" />
+                <span className="hidden sm:inline">Export CSV</span>
+                <span className="sm:hidden">Export</span>
+              </Button>
               <Button 
                 variant="outline"
                 size="sm"
@@ -452,11 +610,13 @@ export default function EmployeesPage() {
             </div>
           </CardContent>
         </Card>
+        
+        {/* Activity Log Dialog moved to bottom of file */}
       </main>
       
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
               {editingEmployee ? 'Edit Employee' : 'Add Employee'}
@@ -497,7 +657,78 @@ export default function EmployeesPage() {
               />
             </div>
             
-            <div className="flex items-center gap-2">
+            <div className="space-y-2">
+              <Label>No. Locker</Label>
+              <LockerSelect 
+                lockers={availableLockers}
+                value={formData.lockerId}
+                onChange={(val) => setFormData(prev => ({ ...prev, lockerId: val, lockerKeyId: '' }))}
+                placeholder="Select an available locker..."
+              />
+            </div>
+            
+            {formData.lockerId && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Contract Ke-</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={formData.contractSeq}
+                      onChange={(e) => setFormData({ ...formData, contractSeq: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="isPermanent"
+                        checked={formData.isPermanent}
+                        onChange={(e) => setFormData({ ...formData, isPermanent: e.target.checked })}
+                        className="w-4 h-4"
+                      />
+                      <Label htmlFor="isPermanent">Karyawan Tetap</Label>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Start Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>End Date</Label>
+                    <Input
+                      type="date"
+                      value={formData.endDate}
+                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                      disabled={formData.isPermanent}
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Kode Kunci Locker</Label>
+                  <TomSelectWrapper
+                    options={availableKeys.map(k => ({
+                      value: k.id,
+                      text: k.physicalKeyNumber ? `${k.physicalKeyNumber} (Key #${k.keyNumber})` : `Key #${k.keyNumber}`,
+                    }))}
+                    value={formData.lockerKeyId}
+                    onChange={(val) => setFormData(prev => ({ ...prev, lockerKeyId: val }))}
+                    placeholder="Select key to assign..."
+                  />
+                </div>
+              </>
+            )}
+            
+            <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
               <input
                 type="checkbox"
                 id="isActive"
@@ -534,6 +765,51 @@ export default function EmployeesPage() {
         onOpenChange={setImportDialogOpen}
         onImportComplete={fetchEmployees}
       />
+      
+      {/* Activity Log Dialog */}
+      <Dialog open={showLogs} onOpenChange={setShowLogs}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="w-5 h-5 text-blue-500" />
+              Riwayat Aktivitas Karyawan
+            </DialogTitle>
+            <DialogDescription>
+              Menampilkan {activityLogs.length} aktivitas terbaru pada data karyawan, locker, dan kunci.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto pr-2 mt-4 space-y-3">
+            {activityLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center border border-dashed rounded-lg bg-gray-50 dark:bg-gray-900/50">
+                <ClipboardList className="w-8 h-8 text-gray-400 mb-2" />
+                <p className="text-sm text-gray-500">Belum ada log aktivitas</p>
+              </div>
+            ) : (
+              activityLogs.map((log: any) => (
+                <div key={log.id} className="flex items-start gap-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border shadow-sm text-sm">
+                  <Badge 
+                    variant={log.action === 'CREATE' ? 'default' : log.action === 'DELETE' ? 'destructive' : log.action === 'IMPORT' ? 'outline' : 'secondary'}
+                    className="mt-0.5 shrink-0 text-xs w-20 justify-center"
+                  >
+                    {log.action}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 dark:text-gray-100 font-medium leading-relaxed">{log.description}</p>
+                    <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
+                      {new Date(log.timestamp).toLocaleString('id-ID', { 
+                        weekday: 'long',
+                        day: '2-digit', month: 'long', year: 'numeric',
+                        hour: '2-digit', minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -11,15 +11,19 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Employee } from '@/types'
+import { Employee, Contract } from '@/types'
 import { Loader2 } from 'lucide-react'
 import { EmployeeSelect } from './tom-select-wrapper'
+import { format } from 'date-fns'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 
 interface ContractFormProps {
   lockerId: string
   lockerNumber: string
   currentContractSeq: number
   currentEmployee?: Employee  // For contract extensions
+  contracts?: Contract[]  // All contracts for history display
   open: boolean
   onClose: () => void
   onSuccess: () => void
@@ -30,6 +34,7 @@ export function ContractForm({
   lockerNumber, 
   currentContractSeq,
   currentEmployee,
+  contracts = [],
   open, 
   onClose, 
   onSuccess 
@@ -49,7 +54,7 @@ export function ContractForm({
     const fetchEmployees = async () => {
       setLoading(true)
       try {
-        const res = await fetch('/api/employees')
+        const res = await fetch('/api/employees?withoutLocker=true')
         const data = await res.json()
         setEmployees(data)
       } catch (error) {
@@ -118,6 +123,36 @@ export function ContractForm({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Contract History */}
+          {contracts.length > 0 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Riwayat Contract</Label>
+              <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
+                {contracts
+                  .sort((a, b) => a.contractSeq - b.contractSeq)
+                  .map((c) => (
+                    <div key={c.id} className={`px-3 py-2 text-sm flex items-center justify-between ${c.isActive ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={c.isActive ? 'default' : 'secondary'} className="text-xs">
+                          Contract {c.contractSeq}
+                        </Badge>
+                        {c.isActive && <span className="text-xs text-blue-600 font-medium">Active</span>}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {format(new Date(c.startDate), 'dd/MM/yyyy')} - {c.endDate ? format(new Date(c.endDate), 'dd/MM/yyyy') : 'Permanent'}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+          
+          <Separator />
+          
+          <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Contract Ke-{currentContractSeq + 1} (Baru)
+          </div>
+          
           <div className="space-y-2">
             <Label>Locker</Label>
             <Input value={lockerNumber} disabled />

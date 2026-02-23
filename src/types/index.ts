@@ -18,6 +18,7 @@ export interface Employee {
   contracts?: (Contract & { 
     locker?: Pick<Locker, 'lockerNumber' | 'roomId'> 
   })[]
+  heldKeys?: LockerKey[]
 }
 
 export interface Locker {

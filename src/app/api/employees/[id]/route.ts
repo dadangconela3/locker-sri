@@ -47,7 +47,7 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { nik, name, department, isActive, lockerId, contractSeq, startDate, endDate, lockerKeyId, keyReturned } = body
+    const { nik, name, department, isActive, lockerId, contractSeq, startDate, endDate, lockerKeyId, keyReturned, isRollback, forceWithoutLocker } = body
     
     // First, update the basic employee details
     const updateData: Record<string, string | boolean> = {}
@@ -126,6 +126,73 @@ export async function PATCH(
       })
       
       return NextResponse.json(employee)
+    }
+    
+    // Handle employee rollback (reactivation)
+    if (isActive === true && isRollback) {
+      try {
+        await prisma.$transaction(async (tx) => {
+          // Find the latest contract of this employee
+          const latestContract = await tx.contract.findFirst({
+            where: { employeeId: id },
+            orderBy: { contractSeq: 'desc' },
+            include: { locker: true }
+          })
+
+          if (!latestContract) return // No contract history, just activate normally
+
+          const locker = latestContract.locker
+          
+          if (locker.status === 'AVAILABLE' || locker.status === 'OVERDUE') {
+            // Restore contract
+            await tx.contract.update({
+               where: { id: latestContract.id },
+               data: { isActive: true }
+            })
+            
+            // Restore locker status
+            await tx.locker.update({
+               where: { id: locker.id },
+               data: { status: 'FILLED' }
+            })
+            
+            // Reassign available key (if they returned it)
+            const availableKey = await tx.lockerKey.findFirst({
+               where: { lockerId: locker.id, status: 'AVAILABLE' }
+            })
+            if (availableKey) {
+               await tx.lockerKey.update({
+                  where: { id: availableKey.id },
+                  data: { status: 'WITH_EMPLOYEE', holderId: id }
+               })
+               await tx.keyLog.create({
+                  data: { lockerId: locker.id, lockerKeyId: availableKey.id, employeeId: id, action: 'TAKEN', method: 'MANUAL' }
+               })
+            }
+          } else if (!forceWithoutLocker) {
+            // Locker is occupied by someone else, and user hasn't explicitly skipped it
+            throw new Error('LOCKER_OCCUPIED')
+          }
+          // If forceWithoutLocker is true, we just exit the transaction normally and let the employee be active without a contract
+        })
+        
+        // Log the activation
+        await prisma.activityLog.create({
+          data: {
+            action: 'UPDATE',
+            entity: 'EMPLOYEE',
+            entityId: id,
+            description: `${employee.nik} - ${employee.name}: Karyawan diaktifkan kembali (Rollback)${forceWithoutLocker ? ' tanpa loker karena sudah terisi' : ''}`,
+          },
+        })
+        
+        return NextResponse.json(employee)
+      } catch (err: any) {
+        if (err.message === 'LOCKER_OCCUPIED') {
+          return NextResponse.json({ error: 'LOCKER_OCCUPIED', message: 'Loker lama sudah terisi' }, { status: 409 })
+        }
+        throw err
+      }
     }
     
     // Process locker, contract, and key updates using a transaction

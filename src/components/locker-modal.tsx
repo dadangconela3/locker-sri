@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { 
   User, 
@@ -22,7 +23,9 @@ import {
   CheckCircle,
   XCircle,
   History,
-  Settings
+  Settings,
+  Edit2,
+  Trash2
 } from 'lucide-react'
 import {
   Select,
@@ -237,7 +240,7 @@ export function LockerModal({ locker, open, onClose, onRefresh }: LockerModalPro
               </TabsList>
               
               <TabsContent value="contracts" className="mt-4">
-                <ContractHistory contracts={locker.contracts || []} />
+                <ContractHistory contracts={locker.contracts || []} onRefresh={onRefresh} />
               </TabsContent>
               
               <TabsContent value="keylogs" className="mt-4">
@@ -253,8 +256,10 @@ export function LockerModal({ locker, open, onClose, onRefresh }: LockerModalPro
             lockerId={locker.id}
             lockerNumber={locker.lockerNumber}
             currentContractSeq={
-              locker.contracts && locker.contracts.length > 0
-                ? Math.max(...locker.contracts.map(c => c.contractSeq))
+              currentContract && locker.contracts
+                ? Math.max(0, ...locker.contracts
+                    .filter(c => c.employeeId === currentContract.employeeId)
+                    .map(c => c.contractSeq))
                 : 0
             }
             currentEmployee={currentContract?.employee}
@@ -315,32 +320,135 @@ export function LockerModal({ locker, open, onClose, onRefresh }: LockerModalPro
   )
 }
 
-function ContractHistory({ contracts }: { contracts: Contract[] }) {
+function ContractHistory({ contracts, onRefresh }: { contracts: Contract[], onRefresh: () => void }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ startDate: '', endDate: '' })
+  const [saving, setSaving] = useState(false)
+
   if (!contracts.length) {
     return <p className="text-center text-gray-500 py-4">No contract history</p>
   }
   
+  const handleEditClick = (contract: Contract) => {
+    setEditingId(contract.id)
+    setEditForm({
+      startDate: contract.startDate ? format(new Date(contract.startDate), 'yyyy-MM-dd') : '',
+      endDate: contract.endDate ? format(new Date(contract.endDate), 'yyyy-MM-dd') : ''
+    })
+  }
+
+  const handleSaveEdit = async (contract: Contract) => {
+    // Validation
+    const sortedContracts = [...contracts].sort((a,b) => a.contractSeq - b.contractSeq)
+    const sortedIndex = sortedContracts.findIndex(c => c.id === contract.id)
+    
+    // Validate bounds constraint with previous contract
+    if (sortedIndex > 0) {
+      const prevContract = sortedContracts[sortedIndex - 1]
+      if (prevContract.endDate && new Date(editForm.startDate) <= new Date(prevContract.endDate)) {
+        alert("Peringatan: Tanggal Mulai tidak boleh mendahului atau bersamaan dengan Tanggal Selesai kontrak sebelumnya.")
+        return
+      }
+    }
+    
+    // Validate bounds constraint with next contract
+    if (sortedIndex < sortedContracts.length - 1) {
+      const nextContract = sortedContracts[sortedIndex + 1]
+      if (!editForm.endDate || new Date(editForm.endDate) >= new Date(nextContract.startDate)) {
+        alert("Peringatan: Tanggal Selesai tidak boleh melampaui atau bersamaan dengan Tanggal Mulai kontrak berikutnya.")
+        return
+      }
+    }
+    
+    // Validate self (Start Date <= End Date)
+    if (editForm.endDate && new Date(editForm.endDate) < new Date(editForm.startDate)) {
+      alert('Error: Tanggal Akhir kontrak tidak boleh mendahului Tanggal Awal kontrak.')
+      return
+    }
+    
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/contracts/${contract.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          startDate: new Date(editForm.startDate).toISOString(),
+          endDate: editForm.endDate ? new Date(editForm.endDate).toISOString() : null
+        })
+      })
+      if (!res.ok) throw new Error('Failed to update')
+      setEditingId(null)
+      onRefresh()
+    } catch (error) {
+      console.error(error)
+      alert('Gagal menyimpan perubahan kontrak.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (contractId: string) => {
+    if (!confirm('Apakah Anda yakin ingin menghapus sejarah kontrak ini secara permanen?')) return
+    try {
+      const res = await fetch(`/api/contracts/${contractId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to delete')
+      onRefresh()
+    } catch (error) {
+      console.error(error)
+      alert('Gagal menghapus kontrak.')
+    }
+  }
+
   return (
     <div className="space-y-3">
       {contracts.map((contract) => {
         const remaining = contract.endDate ? getRemainingDays(new Date(contract.endDate)) : null
+        const isEditing = editingId === contract.id
+        
         return (
           <div 
             key={contract.id} 
-            className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg flex justify-between items-center"
+            className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg flex flex-col sm:flex-row justify-between sm:items-center gap-3"
           >
-            <div>
-              <p className="font-medium">Contract #{contract.contractSeq}</p>
-              <p className="text-sm text-gray-500">
-                {format(new Date(contract.startDate), 'dd MMM yyyy')} - {contract.endDate ? format(new Date(contract.endDate), 'dd MMM yyyy') : 'Permanent'}
-              </p>
-              {contract.employee && (
-                <p className="text-sm text-gray-400">{contract.employee.name}</p>
-              )}
-            </div>
-            <Badge className={remaining !== null ? getStatusColor(remaining) : 'bg-emerald-100 text-emerald-700'}>
-              {contract.isActive ? (remaining !== null ? formatRemainingDays(remaining) : 'Permanent') : 'Ended'}
-            </Badge>
+            {isEditing ? (
+              <div className="flex-1 space-y-3 w-full">
+                <p className="font-medium text-sm text-gray-500">Edit Kontrak #{contract.contractSeq}</p>
+                <div className="flex flex-col sm:flex-row gap-2 items-center">
+                  <Input type="date" value={editForm.startDate} onChange={e => setEditForm({...editForm, startDate: e.target.value})} className="h-8 w-full sm:w-auto" />
+                  <span className="text-gray-400 hidden sm:block">-</span>
+                  <Input type="date" value={editForm.endDate} onChange={e => setEditForm({...editForm, endDate: e.target.value})} className="h-8 w-full sm:w-auto" />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => handleSaveEdit(contract)} disabled={saving}>{saving ? 'Saving...' : 'Simpan'}</Button>
+                  <Button size="sm" variant="outline" onClick={() => setEditingId(null)}>Batal</Button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-medium">Kontrak #{contract.contractSeq}</p>
+                    <div className="flex">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-500" onClick={() => handleEditClick(contract)}>
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500/70 hover:text-red-600" onClick={() => handleDelete(contract.id)}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500">
+                    {format(new Date(contract.startDate), 'dd MMM yyyy')} - {contract.endDate ? format(new Date(contract.endDate), 'dd MMM yyyy') : 'Permanent'}
+                  </p>
+                  {contract.employee && (
+                    <p className="text-sm text-gray-400">{contract.employee.name}</p>
+                  )}
+                </div>
+                <Badge className={remaining !== null ? getStatusColor(remaining) : 'bg-emerald-100 text-emerald-700'}>
+                  {contract.isActive ? (remaining !== null ? formatRemainingDays(remaining) : 'Permanent') : 'Ended'}
+                </Badge>
+              </>
+            )}
           </div>
         )
       })}

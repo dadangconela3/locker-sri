@@ -63,7 +63,7 @@ function LockerButton({
       className={cn(
         'w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded border-2',
         'text-white font-medium text-xs sm:text-sm',
-        'transition-all duration-200 transform hover:scale-110 hover:shadow-lg hover:z-10',
+        'transition-all duration-200 hover:shadow-lg hover:z-10',
         'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
         statusColors[locker.status]
       )}

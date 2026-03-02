@@ -115,6 +115,28 @@ export function ContractForm({
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validate overlapping dates
+    if (contracts && contracts.length > 0) {
+      const sortedContracts = [...contracts].sort((a,b) => a.contractSeq - b.contractSeq)
+      const latestContract = sortedContracts[sortedContracts.length - 1]
+      
+      if (latestContract && latestContract.endDate) {
+        if (new Date(formData.startDate) <= new Date(latestContract.endDate)) {
+          alert('Error: Tanggal Mulai kontrak baru tidak boleh mendahului atau bersamaan dengan Tanggal Selesai kontrak sebelumnya.')
+          return
+        }
+      }
+    }
+    
+    // Validate that End Date is not before Start Date
+    if (!isPermanent && formData.endDate) {
+      if (new Date(formData.endDate) < new Date(formData.startDate)) {
+        alert('Error: Tanggal Akhir kontrak tidak boleh mendahului Tanggal Awal kontrak.')
+        return
+      }
+    }
+    
     setSubmitting(true)
     
     try {

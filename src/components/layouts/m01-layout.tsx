@@ -102,7 +102,7 @@ const LockerButton = memo(function LockerButton({
       className={cn(
         sizeClasses,
         'rounded border-2 text-white font-medium',
-        'transition-all duration-200 transform hover:scale-110 hover:shadow-lg hover:z-10',
+        'transition-all duration-200 hover:shadow-lg hover:z-10',
         'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500',
         statusColors[locker.status]
       )}

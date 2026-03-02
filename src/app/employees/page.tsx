@@ -113,6 +113,8 @@ export default function EmployeesPage() {
   const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
   const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null)
   const [deactivating, setDeactivating] = useState(false)
+  const [rollbackDialogOpen, setRollbackDialogOpen] = useState(false)
+  const [rollbackEmployee, setRollbackEmployee] = useState<Employee | null>(null)
   const [showExtendContract, setShowExtendContract] = useState(false)
   const [extendContractData, setExtendContractData] = useState<{
     lockerId: string
@@ -326,21 +328,32 @@ export default function EmployeesPage() {
       setDeactivatingEmployee(employee)
       setDeactivateDialogOpen(true)
     } else {
-      // Activating: simple toggle
-      handleActivate(employee)
+      // Activating: rollback logic
+      handleActivate(employee, false)
     }
   }
 
-  const handleActivate = async (employee: Employee) => {
+  const handleActivate = async (employee: Employee, forceWithoutLocker: boolean = false) => {
     try {
-      await fetch(`/api/employees/${employee.id}`, {
+      const res = await fetch(`/api/employees/${employee.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: true }),
+        body: JSON.stringify({ isActive: true, isRollback: true, forceWithoutLocker }),
       })
+      
+      if (res.status === 409) {
+        // Locker occupied conflict
+        setRollbackEmployee(employee)
+        setRollbackDialogOpen(true)
+        return
+      }
+      
       fetchEmployees()
+      setRollbackDialogOpen(false)
+      setRollbackEmployee(null)
     } catch (error) {
       console.error('Failed to activate employee:', error)
+      alert('Gagal mengaktifkan karyawan')
     }
   }
 
@@ -915,6 +928,32 @@ export default function EmployeesPage() {
               className="bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               {deactivating ? 'Memproses...' : 'Sudah Dikembalikan'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      
+      {/* Rollback Conflict Dialog */}
+      <AlertDialog open={rollbackDialogOpen} onOpenChange={(open) => { if (!open) { setRollbackDialogOpen(false); setRollbackEmployee(null) } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-red-500" />
+              Loker Lama Sudah Terisi
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              Karyawan ini <strong>({rollbackEmployee?.name})</strong> dahulu menempati loker yang sekarang sudah digunakan oleh orang lain. 
+              <br/><br/>
+              Apakah Anda tetap ingin mengaktifkan karyawan ini tanpa memberikan hak loker? (Karyawan akan aktif, tetapi admin harus memberikan/assign loker baru nanti).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel>Batal (Opsi A)</AlertDialogCancel>
+            <Button
+              onClick={() => rollbackEmployee && handleActivate(rollbackEmployee, true)}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              Tetap Aktifkan (Opsi B)
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -78,7 +78,7 @@ export function ContractForm({
     const fetchEmployees = async () => {
       setLoading(true)
       try {
-        const res = await fetch('/api/employees?withoutLocker=true')
+        const res = await fetch('/api/employees?withoutLocker=true&activeOnly=true')
         const data = await res.json()
         setEmployees(data)
       } catch (error) {

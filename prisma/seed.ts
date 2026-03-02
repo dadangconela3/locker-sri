@@ -70,24 +70,6 @@ async function main() {
   
   console.log(`✅ Created ${allLockers.length * 2} keys (2 per locker)`)
   
-  // Create some sample employees for testing
-  const sampleEmployees = [
-    { nik: 'EMP001', name: 'John Doe', department: 'Engineering' },
-    { nik: 'EMP002', name: 'Jane Smith', department: 'Marketing' },
-    { nik: 'EMP003', name: 'Bob Wilson', department: 'Finance' },
-    { nik: 'EMP004', name: 'Alice Brown', department: 'HR' },
-    { nik: 'EMP005', name: 'Charlie Davis', department: 'IT' },
-    { nik: 'HRGA001', name: 'HRGA Admin', department: 'HRGA' },
-  ]
-  
-  for (const emp of sampleEmployees) {
-    await prisma.employee.create({
-      data: emp,
-    })
-  }
-  
-  console.log(`✅ Created ${sampleEmployees.length} sample employees`)
-  
   // Get some lockers and employees for sample contracts
   const lockers = await prisma.locker.findMany({ take: 5 })
   const employees = await prisma.employee.findMany()

@@ -47,7 +47,7 @@ export async function PATCH(
   try {
     const { id } = await params
     const body = await request.json()
-    const { nik, name, department, isActive, lockerId, contractSeq, startDate, endDate, lockerKeyId } = body
+    const { nik, name, department, isActive, lockerId, contractSeq, startDate, endDate, lockerKeyId, keyReturned } = body
     
     // First, update the basic employee details
     const updateData: Record<string, string | boolean> = {}
@@ -61,6 +61,72 @@ export async function PATCH(
       where: { id },
       data: updateData,
     })
+    
+    // Handle employee deactivation with key return logic
+    if (isActive === false && keyReturned !== undefined) {
+      await prisma.$transaction(async (tx) => {
+        const activeContract = await tx.contract.findFirst({
+          where: { employeeId: id, isActive: true },
+          include: { locker: true },
+        })
+        
+        if (keyReturned) {
+          // Key returned: deactivate contract, set locker to AVAILABLE, release keys
+          if (activeContract) {
+            await tx.contract.update({
+              where: { id: activeContract.id },
+              data: { isActive: false },
+            })
+            await tx.locker.update({
+              where: { id: activeContract.lockerId },
+              data: { status: 'AVAILABLE' },
+            })
+          }
+          
+          // Release all held keys
+          const heldKeys = await tx.lockerKey.findMany({
+            where: { holderId: id },
+          })
+          for (const key of heldKeys) {
+            await tx.lockerKey.update({
+              where: { id: key.id },
+              data: { status: 'AVAILABLE', holderId: null },
+            })
+            await tx.keyLog.create({
+              data: {
+                lockerId: key.lockerId,
+                lockerKeyId: key.id,
+                employeeId: id,
+                action: 'RETURNED',
+                method: 'MANUAL',
+              },
+            })
+          }
+        } else {
+          // Key NOT returned: keep contract active so employee appears in overdue
+          // Update locker status to OVERDUE
+          if (activeContract) {
+            await tx.locker.update({
+              where: { id: activeContract.lockerId },
+              data: { status: 'OVERDUE' },
+            })
+          }
+        }
+      })
+      
+      // Log the deactivation
+      await prisma.activityLog.create({
+        data: {
+          action: 'UPDATE',
+          entity: 'EMPLOYEE',
+          entityId: id,
+          description: `${employee.nik} - ${employee.name}: Karyawan dinonaktifkan${keyReturned ? ', kunci dikembalikan, locker available' : ', kunci belum dikembalikan, locker overdue'}`,
+          details: JSON.stringify({ keyReturned }),
+        },
+      })
+      
+      return NextResponse.json(employee)
+    }
     
     // Process locker, contract, and key updates using a transaction
     await prisma.$transaction(async (tx) => {

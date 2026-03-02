@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Employee, Contract } from '@/types'
 import { Loader2 } from 'lucide-react'
 import { EmployeeSelect } from './tom-select-wrapper'
-import { format } from 'date-fns'
+import { format, addDays, addMonths } from 'date-fns'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 
@@ -49,6 +49,30 @@ export function ContractForm({
     endDate: '',
   })
   
+  // Calculate start date when modal opens based on latest contract
+  useEffect(() => {
+    if (open && currentEmployee && contracts?.length > 0) {
+      let startDateString = new Date().toISOString().split('T')[0]
+      
+      const latestContract = contracts.reduce((prev, current) => 
+        (prev.contractSeq > current.contractSeq) ? prev : current
+      )
+      
+      if (latestContract.endDate) {
+        // Safe date addition using date-fns to handle timezone offsets properly
+        // This parses the DB's UTC ISO string into a local Date object and adds 1 day
+        const localEndDate = new Date(latestContract.endDate)
+        startDateString = format(addDays(localEndDate, 1), 'yyyy-MM-dd')
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        employeeId: currentEmployee.id,
+        startDate: startDateString
+      }))
+    }
+  }, [open, currentEmployee, contracts])
+  
   // Fetch employees only for new assignments (not extensions)
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -70,15 +94,21 @@ export function ContractForm({
     }
   }, [open, currentEmployee])
   
-  // Set default end date to 1 year from start
+  // Set default end date based on custom formula:
+  // If start date is 1-15: (Start + 5 Months) - 1 Day
+  // If start date is 16-31: (Start + 6 Months) - 1 Day
   useEffect(() => {
     if (formData.startDate) {
-      const start = new Date(formData.startDate)
-      const end = new Date(start)
-      end.setFullYear(end.getFullYear() + 1)
+      // Split safely to avoid any UTC to local timezone shifting parsing bugs
+      const [y, m, d] = formData.startDate.split('-').map(Number)
+      const start = new Date(y, m - 1, d)
+      
+      const monthsToAdd = d <= 15 ? 5 : 6
+      const endDateObj = addDays(addMonths(start, monthsToAdd), -1)
+      
       setFormData(prev => ({ 
         ...prev, 
-        endDate: end.toISOString().split('T')[0] 
+        endDate: format(endDateObj, 'yyyy-MM-dd')
       }))
     }
   }, [formData.startDate])

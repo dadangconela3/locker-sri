@@ -34,7 +34,7 @@ async function main() {
       // Use upsert to avoid duplicates if run multiple times
       await cloudPrisma.employee.upsert({
         where: { id: emp.id },
-        update: {},
+        update: emp,
         create: emp,
       })
     }
@@ -45,7 +45,7 @@ async function main() {
     for (const locker of lockers) {
       await cloudPrisma.locker.upsert({
         where: { id: locker.id },
-        update: {},
+        update: locker,
         create: locker,
       })
     }
@@ -56,7 +56,7 @@ async function main() {
     for (const key of lockerKeys) {
       await cloudPrisma.lockerKey.upsert({
         where: { id: key.id },
-        update: {},
+        update: key,
         create: key,
       })
     }
@@ -67,7 +67,7 @@ async function main() {
     for (const contract of contracts) {
       await cloudPrisma.contract.upsert({
         where: { id: contract.id },
-        update: {},
+        update: contract,
         create: contract,
       })
     }
@@ -78,7 +78,7 @@ async function main() {
     for (const log of keyLogs) {
       await cloudPrisma.keyLog.upsert({
         where: { id: log.id },
-        update: {},
+        update: log,
         create: log,
       })
     }

@@ -14,6 +14,15 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -37,11 +46,15 @@ import {
   ArrowUp,
   ArrowDown,
   Filter,
-  ClipboardList
+  ClipboardList,
+  AlertTriangle,
+  KeyRound,
+  Calendar
 } from 'lucide-react'
-import { Employee, Locker, LockerKey } from '@/types'
+import { Employee, Locker, LockerKey, Contract } from '@/types'
 import { EmployeeImportDialog } from '@/components/employee-import-dialog'
 import { LockerSelect, TomSelectWrapper } from '@/components/tom-select-wrapper'
+import { ContractForm } from '@/components/contract-form'
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -97,6 +110,17 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false)
   const [activityLogs, setActivityLogs] = useState<any[]>([])
   const [showLogs, setShowLogs] = useState(false)
+  const [deactivateDialogOpen, setDeactivateDialogOpen] = useState(false)
+  const [deactivatingEmployee, setDeactivatingEmployee] = useState<Employee | null>(null)
+  const [deactivating, setDeactivating] = useState(false)
+  const [showExtendContract, setShowExtendContract] = useState(false)
+  const [extendContractData, setExtendContractData] = useState<{
+    lockerId: string
+    lockerNumber: string
+    currentContractSeq: number
+    currentEmployee: Employee
+    contracts: Contract[]
+  } | null>(null)
   
   // Custom sort function for locker numbers
   // Order: M01 -> M02 -> F01 -> Others -> Empty
@@ -170,8 +194,11 @@ export default function EmployeesPage() {
   }, [search])
   
   useEffect(() => {
-    fetchEmployees()
-  }, [])
+    const timer = setTimeout(() => {
+      fetchEmployees()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [fetchEmployees])
   
   // Fetch activity logs
   const fetchLogs = useCallback(async () => {
@@ -293,16 +320,47 @@ export default function EmployeesPage() {
     }
   }
   
-  const handleToggleActive = async (employee: Employee) => {
+  const handleToggleActive = (employee: Employee) => {
+    if (employee.isActive) {
+      // Deactivating: show confirmation dialog
+      setDeactivatingEmployee(employee)
+      setDeactivateDialogOpen(true)
+    } else {
+      // Activating: simple toggle
+      handleActivate(employee)
+    }
+  }
+
+  const handleActivate = async (employee: Employee) => {
     try {
       await fetch(`/api/employees/${employee.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ isActive: !employee.isActive }),
+        body: JSON.stringify({ isActive: true }),
       })
       fetchEmployees()
     } catch (error) {
-      console.error('Failed to toggle employee status:', error)
+      console.error('Failed to activate employee:', error)
+    }
+  }
+
+  const handleDeactivate = async (keyReturned: boolean) => {
+    if (!deactivatingEmployee) return
+    setDeactivating(true)
+    try {
+      await fetch(`/api/employees/${deactivatingEmployee.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive: false, keyReturned }),
+      })
+      fetchEmployees()
+      setDeactivateDialogOpen(false)
+      setDeactivatingEmployee(null)
+    } catch (error) {
+      console.error('Failed to deactivate employee:', error)
+      alert('Gagal menonaktifkan karyawan')
+    } finally {
+      setDeactivating(false)
     }
   }
   
@@ -739,6 +797,39 @@ export default function EmployeesPage() {
               <Label htmlFor="isActive">Active</Label>
             </div>
             
+            {editingEmployee && formData.lockerId && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-blue-200 text-blue-700 hover:bg-blue-50"
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/employees/${editingEmployee.id}`)
+                    const fullEmployee = await res.json()
+                    const activeContract = fullEmployee.contracts?.find((c: Contract) => c.isActive)
+                    if (activeContract) {
+                      setExtendContractData({
+                        lockerId: activeContract.lockerId,
+                        lockerNumber: activeContract.locker?.lockerNumber || '',
+                        currentContractSeq: Math.max(...fullEmployee.contracts.map((c: Contract) => c.contractSeq)),
+                        currentEmployee: editingEmployee,
+                        contracts: fullEmployee.contracts || [],
+                      })
+                      setShowExtendContract(true)
+                    } else {
+                      alert('Karyawan tidak memiliki kontrak aktif untuk diperpanjang.')
+                    }
+                  } catch (error) {
+                    console.error('Failed to fetch employee details:', error)
+                    alert('Gagal memuat data kontrak karyawan.')
+                  }
+                }}
+              >
+                <Calendar className="w-4 h-4" />
+                Extend Contract
+              </Button>
+            )}
+            
             <div className="flex gap-2 pt-4">
               <Button
                 variant="outline"
@@ -759,12 +850,75 @@ export default function EmployeesPage() {
         </DialogContent>
       </Dialog>
       
+      {/* Extend Contract Dialog */}
+      {showExtendContract && extendContractData && (
+        <ContractForm
+          lockerId={extendContractData.lockerId}
+          lockerNumber={extendContractData.lockerNumber}
+          currentContractSeq={extendContractData.currentContractSeq}
+          currentEmployee={extendContractData.currentEmployee}
+          contracts={extendContractData.contracts}
+          open={showExtendContract}
+          onClose={() => { setShowExtendContract(false); setExtendContractData(null) }}
+          onSuccess={() => {
+            setShowExtendContract(false)
+            setExtendContractData(null)
+            setDialogOpen(false)
+            fetchEmployees()
+          }}
+        />
+      )}
+      
       {/* Import Dialog */}
       <EmployeeImportDialog
         open={importDialogOpen}
         onOpenChange={setImportDialogOpen}
         onImportComplete={fetchEmployees}
       />
+      
+      {/* Deactivation Confirmation Dialog */}
+      <AlertDialog open={deactivateDialogOpen} onOpenChange={(open) => { if (!open) { setDeactivateDialogOpen(false); setDeactivatingEmployee(null) } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              Nonaktifkan Karyawan
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span>Anda akan menonaktifkan karyawan <strong>{deactivatingEmployee?.name}</strong> ({deactivatingEmployee?.nik}).</span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="py-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-700 dark:text-gray-300">
+              <KeyRound className="w-4 h-4" />
+              Apakah karyawan sudah mengembalikan kunci locker?
+            </div>
+            <p className="text-xs text-gray-500">
+              Jika <strong>sudah</strong>, locker akan diubah ke status Available. Jika <strong>belum</strong>, karyawan tetap muncul di daftar Overdue.
+            </p>
+          </div>
+          
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel disabled={deactivating}>Batal</AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={() => handleDeactivate(false)}
+              disabled={deactivating}
+              className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            >
+              {deactivating ? 'Memproses...' : 'Belum Dikembalikan'}
+            </Button>
+            <Button
+              onClick={() => handleDeactivate(true)}
+              disabled={deactivating}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {deactivating ? 'Memproses...' : 'Sudah Dikembalikan'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       {/* Activity Log Dialog */}
       <Dialog open={showLogs} onOpenChange={setShowLogs}>

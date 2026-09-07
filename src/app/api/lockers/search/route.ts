@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       include: {
         contracts: {
           include: { employee: true },
-          orderBy: { contractSeq: 'desc' },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
         },
         keys: {
           include: { holder: true },

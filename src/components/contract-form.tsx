@@ -113,11 +113,18 @@ export function ContractForm({
     }
   }, [formData.startDate])
   
+  const selectedEmp = employees.find(e => e.id === formData.employeeId)
+  const targetContracts = currentEmployee ? contracts : (selectedEmp?.contracts || [])
+  const targetContractSeq = currentEmployee 
+    ? currentContractSeq 
+    : (targetContracts.length > 0 ? Math.max(...targetContracts.map(c => c.contractSeq)) : 0)
+  const nextContractSeq = targetContractSeq + 1
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validate overlapping dates
-    if (contracts && contracts.length > 0) {
+    // Validate overlapping dates only when extending existing employee contract
+    if (currentEmployee && contracts && contracts.length > 0) {
       const sortedContracts = [...contracts].sort((a,b) => a.contractSeq - b.contractSeq)
       const latestContract = sortedContracts[sortedContracts.length - 1]
       
@@ -146,7 +153,7 @@ export function ContractForm({
         body: JSON.stringify({
           lockerId,
           employeeId: formData.employeeId,
-          contractSeq: currentContractSeq + 1,
+          contractSeq: nextContractSeq,
           startDate: new Date(formData.startDate).toISOString(),
           endDate: isPermanent ? null : new Date(formData.endDate).toISOString(),
         }),
@@ -175,12 +182,12 @@ export function ContractForm({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Contract History */}
-          {contracts.length > 0 && (
+          {/* Contract History of Employee */}
+          {targetContracts.length > 0 && (
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Riwayat Contract</Label>
+              <Label className="text-sm font-semibold">Riwayat Kontrak Karyawan</Label>
               <div className="max-h-40 overflow-y-auto border rounded-lg divide-y">
-                {contracts
+                {targetContracts
                   .sort((a, b) => a.contractSeq - b.contractSeq)
                   .map((c) => (
                     <div key={c.id} className={`px-3 py-2 text-sm flex items-center justify-between ${c.isActive ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}>
@@ -202,7 +209,7 @@ export function ContractForm({
           <Separator />
           
           <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            Contract Ke-{currentContractSeq + 1} (Baru)
+            Contract Ke-{nextContractSeq} (Baru)
           </div>
           
           <div className="space-y-2">

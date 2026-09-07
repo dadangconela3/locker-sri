@@ -72,7 +72,6 @@ model Contract {
   employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   locker      Locker   @relation(fields: [lockerId], references: [id], onDelete: Cascade)
   
-  @@unique([lockerId, contractSeq])
   @@index([employeeId])
   @@index([lockerId])
 }

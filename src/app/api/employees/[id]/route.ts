@@ -222,11 +222,26 @@ export async function PATCH(
         
         // 2. If a new locker is selected, create a new contract and mark locker as FILLED
         if (lockerId) {
+          // Deactivate any existing active contracts on the target locker
+          await tx.contract.updateMany({
+            where: { lockerId, isActive: true },
+            data: { isActive: false },
+          })
+
+          let seq = contractSeq
+          if (!seq) {
+            const lastContract = await tx.contract.findFirst({
+              where: { employeeId: id },
+              orderBy: { contractSeq: 'desc' },
+            })
+            seq = lastContract ? lastContract.contractSeq + 1 : 1
+          }
+
           await tx.contract.create({
             data: {
               lockerId,
               employeeId: id,
-              contractSeq: contractSeq || 1,
+              contractSeq: seq,
               startDate: startDate ? new Date(startDate) : new Date(),
               endDate: endDate ? new Date(endDate) : null,
               isActive: true,

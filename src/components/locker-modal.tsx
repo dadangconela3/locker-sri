@@ -263,7 +263,11 @@ export function LockerModal({ locker, open, onClose, onRefresh }: LockerModalPro
                 : 0
             }
             currentEmployee={currentContract?.employee}
-            contracts={locker.contracts || []}
+            contracts={
+              currentContract && locker.contracts
+                ? locker.contracts.filter(c => c.employeeId === currentContract.employeeId)
+                : []
+            }
             open={showContractForm}
             onClose={() => setShowContractForm(false)}
             onSuccess={handleContractSuccess}
@@ -338,11 +342,13 @@ function ContractHistory({ contracts, onRefresh }: { contracts: Contract[], onRe
   }
 
   const handleSaveEdit = async (contract: Contract) => {
-    // Validation
-    const sortedContracts = [...contracts].sort((a,b) => a.contractSeq - b.contractSeq)
+    // Validation: only validate sequential bounds among contracts belonging to the SAME employee
+    const sortedContracts = [...contracts]
+      .filter(c => c.employeeId === contract.employeeId)
+      .sort((a, b) => a.contractSeq - b.contractSeq)
     const sortedIndex = sortedContracts.findIndex(c => c.id === contract.id)
     
-    // Validate bounds constraint with previous contract
+    // Validate bounds constraint with previous contract of the same employee
     if (sortedIndex > 0) {
       const prevContract = sortedContracts[sortedIndex - 1]
       if (prevContract.endDate && new Date(editForm.startDate) <= new Date(prevContract.endDate)) {
@@ -351,7 +357,7 @@ function ContractHistory({ contracts, onRefresh }: { contracts: Contract[], onRe
       }
     }
     
-    // Validate bounds constraint with next contract
+    // Validate bounds constraint with next contract of the same employee
     if (sortedIndex < sortedContracts.length - 1) {
       const nextContract = sortedContracts[sortedIndex + 1]
       if (!editForm.endDate || new Date(editForm.endDate) >= new Date(nextContract.startDate)) {
@@ -437,12 +443,14 @@ function ContractHistory({ contracts, onRefresh }: { contracts: Contract[], onRe
                       </Button>
                     </div>
                   </div>
-                  <p className="text-sm text-gray-500">
+                  {contract.employee && (
+                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {contract.employee.name} <span className="text-xs text-gray-400 font-normal">({contract.employee.nik} • {contract.employee.department})</span>
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-0.5">
                     {format(new Date(contract.startDate), 'dd MMM yyyy')} - {contract.endDate ? format(new Date(contract.endDate), 'dd MMM yyyy') : 'Permanent'}
                   </p>
-                  {contract.employee && (
-                    <p className="text-sm text-gray-400">{contract.employee.name}</p>
-                  )}
                 </div>
                 <Badge className={remaining !== null ? getStatusColor(remaining) : 'bg-emerald-100 text-emerald-700'}>
                   {contract.isActive ? (remaining !== null ? formatRemainingDays(remaining) : 'Permanent') : 'Ended'}

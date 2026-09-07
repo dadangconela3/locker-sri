@@ -63,18 +63,33 @@ export async function POST(request: NextRequest) {
       )
     }
     
-    // Deactivate previous contracts for this locker
+    // Deactivate previous active contracts for this locker and this employee
     await prisma.contract.updateMany({
-      where: { lockerId, isActive: true },
+      where: {
+        OR: [
+          { lockerId, isActive: true },
+          { employeeId, isActive: true },
+        ],
+      },
       data: { isActive: false },
     })
+
+    // Determine contract sequence based on this employee's contract history
+    let seq = contractSeq
+    if (!seq) {
+      const lastContract = await prisma.contract.findFirst({
+        where: { employeeId },
+        orderBy: { contractSeq: 'desc' },
+      })
+      seq = lastContract ? lastContract.contractSeq + 1 : 1
+    }
     
     // Create new contract
     const contract = await prisma.contract.create({
       data: {
         lockerId,
         employeeId,
-        contractSeq: contractSeq || 1,
+        contractSeq: seq,
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         isActive: true,

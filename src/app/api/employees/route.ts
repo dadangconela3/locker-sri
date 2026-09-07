@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       },
       include: {
         contracts: {
-          where: { isActive: true },
+          orderBy: { contractSeq: 'desc' },
           include: {
             locker: true,
           },
@@ -81,6 +81,12 @@ export async function POST(request: NextRequest) {
       
       // If locker is provided during creation, assign it
       if (lockerId) {
+        // Deactivate previous active contracts on this locker
+        await tx.contract.updateMany({
+          where: { lockerId, isActive: true },
+          data: { isActive: false },
+        })
+
         await tx.contract.create({
           data: {
             lockerId,

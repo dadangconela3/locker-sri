@@ -110,9 +110,9 @@ export async function POST(request: NextRequest) {
           continue
         }
         
-        // Get next contract sequence
+        // Get next contract sequence based on employee history
         const existingContracts = await prisma.contract.findMany({
-          where: { lockerId: locker.id },
+          where: { employeeId: employee.id },
           orderBy: { contractSeq: 'desc' },
           take: 1
         })
@@ -126,6 +126,17 @@ export async function POST(request: NextRequest) {
         
         // Create contract and update locker/keys in transaction
         await prisma.$transaction(async (tx) => {
+          // Deactivate previous active contracts for locker and employee
+          await tx.contract.updateMany({
+            where: {
+              OR: [
+                { lockerId: locker.id, isActive: true },
+                { employeeId: employee.id, isActive: true },
+              ]
+            },
+            data: { isActive: false },
+          })
+
           // Create contract
           await tx.contract.create({
             data: {

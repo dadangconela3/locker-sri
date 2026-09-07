@@ -14,7 +14,7 @@ export async function GET(
       include: {
         contracts: {
           include: { employee: true },
-          orderBy: { contractSeq: 'desc' },
+          orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
         },
         keyLogs: {
           include: { employee: true },
